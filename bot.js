@@ -9,9 +9,6 @@ const BOT_NAMES = [
   'DonGga',
   'Prashant',
   'Luffy',
-  'Terek',
-  'Gotham',
-  'Herobrine',
   
 ]
 
