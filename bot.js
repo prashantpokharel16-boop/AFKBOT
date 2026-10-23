@@ -1,103 +1,159 @@
-const mineflayer = require('mineflayer')
 
-const SERVER = 'minechat.levyathan.ch'
+const mineflayer = require('mineflayer')
+const { SocksClient } = require('socks')
+
+// Server configuration
+const SERVER = 'YOUR_SERVER_ADDRESS'
 const PORT = 25565
-const PASSWORD = 'SAROJGMG1'
+const VERSION = '1.21.4'
+
+// Use only accounts you own and are authorized to connect.
+const PASSWORD = process.env.MC_BOT_PASSWORD
 
 const BOT_NAMES = [
-  'IAMABOY',
-  'DonGga',
-  'Prashant',
-  'Luffy'
+  'YOUR_TEST_ACCOUNT'
 ]
 
-const RECONNECT_DELAY = 30000 // 30 seconds
-const START_DELAY = 5000      // 5 seconds between bots
+// Optional SOCKS5 proxy.
+// Leave enabled: false to connect directly.
+// Use a proxy you own or are authorized to use.
+const PROXY = {
+  enabled: false,
+  host: '127.0.0.1',
+  port: 1080,
+  username: '',
+  password: ''
+}
+
+const START_DELAY = 5000
+const RECONNECT_DELAY = 30000
 
 function startBot(username) {
+  let connecting = false
   let reconnectTimer = null
-  let isConnecting = false
+  let stopped = false
 
   function connect() {
-    if (isConnecting) return
+    if (connecting || stopped) return
+    connecting = true
 
-    isConnecting = true
+    console.log(`Connecting ${username}...`)
 
-    console.log(`🔄 Starting ${username}...`)
-
-    const bot = mineflayer.createBot({
+    const options = {
+      username,
       host: SERVER,
       port: PORT,
-      username: username,
-      version: '1.21.4'
-    })
+      version: VERSION
+    }
+
+    if (PROXY.enabled) {
+      delete options.host
+
+      options.connect = client => {
+        SocksClient.createConnection({
+          proxy: {
+            host: PROXY.host,
+            port: PROXY.port,
+            type: 5,
+            ...(PROXY.username
+              ? {
+                  userId: PROXY.username,
+                  password: PROXY.password
+                }
+              : {})
+          },
+          command: 'connect',
+          destination: {
+            host: SERVER,
+            port: PORT
+          }
+        }).then(({ socket }) => {
+          client.setSocket(socket)
+          client.emit('connect')
+        }).catch(error => {
+          console.error(
+            `Proxy connection failed for ${username}:`,
+            error.message
+          )
+          client.emit('error', error)
+        })
+      }
+    }
+
+    let bot
+
+    try {
+      bot = mineflayer.createBot(options)
+    } catch (error) {
+      connecting = false
+      console.error(`${username}: ${error.message}`)
+      scheduleReconnect()
+      return
+    }
+
+    let spawnHandled = false
 
     bot.once('spawn', () => {
-      isConnecting = false
+      connecting = false
+      spawnHandled = true
+      console.log(`${username} spawned`)
 
-      console.log(`✅ ${username} joined the server!`)
-
-      // Wait for AuthMe/login system
+      // Only register accounts on a server where you have
+      // permission to create accounts. Existing accounts may
+      // require /login instead.
       setTimeout(() => {
         if (!bot.entity) return
 
-        console.log(`🔐 Logging in ${username}...`)
+        if (!PASSWORD) {
+          console.log('Set MC_BOT_PASSWORD before using auth commands.')
+          return
+        }
+
+        // Choose the appropriate command for the account's
+        // actual registration state; don't blindly register
+        // every time the bot reconnects.
         bot.chat(`/login ${PASSWORD}`)
 
-        // Wait for login to complete
         setTimeout(() => {
           if (!bot.entity) return
-
-          console.log(`💤 Sending /afk for ${username}...`)
           bot.chat('/afk')
-
-          console.log(`✅ ${username} is now AFK!`)
+          console.log(`${username}: AFK command sent`)
         }, 3000)
-
       }, 2000)
     })
 
     bot.on('kicked', reason => {
-      console.log(`❌ ${username} was kicked:`)
-      console.log(reason)
+      console.log(`${username} kicked:`, reason)
     })
 
     bot.on('error', error => {
-      console.log(`⚠️ ${username} error: ${error.message}`)
+      console.error(`${username} error:`, error.message)
     })
 
     bot.on('end', () => {
-      isConnecting = false
+      connecting = false
+      console.log(`${username} disconnected`)
+      scheduleReconnect()
+    })
 
-      console.log(`🔌 ${username} disconnected.`)
-
-      if (reconnectTimer) return
-
-      console.log(
-        `🔄 ${username} reconnecting in ${RECONNECT_DELAY / 1000} seconds...`
-      )
+    function scheduleReconnect() {
+      if (stopped || reconnectTimer) return
 
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null
         connect()
       }, RECONNECT_DELAY)
-    })
+    }
   }
 
   connect()
 }
 
-// Start bots one by one
-BOT_NAMES.forEach((username, index) => {
-  setTimeout(() => {
-    startBot(username)
-  }, index * START_DELAY)
-})
-
-console.log('=================================')
-console.log('      MineChat AFK Bot')
-console.log('=================================')
+console.log('Minecraft AFK bot starting')
 console.log(`Server: ${SERVER}:${PORT}`)
-console.log(`Bots: ${BOT_NAMES.length}`)
-console.log(`Reconnect: ${RECONNECT_DELAY / 1000}s`)
-console.log('=================================')
+console.log(`Accounts: ${BOT_NAMES.length}`)
+console.log(`Proxy enabled: ${PROXY.enabled}`)
+
+BOT_NAMES.forEach((username, index) => {
+  setTimeout(() => startBot(username), index * START_DELAY)
+})
