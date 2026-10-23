@@ -1,0 +1,15 @@
+
+{
+  "name": "minecraft-afk-bots",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mineflayer AFK bot manager",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "mineflayer": "^4.31.0"
+  }
+}
