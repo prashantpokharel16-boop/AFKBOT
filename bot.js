@@ -2,21 +2,16 @@
 const mineflayer = require('mineflayer')
 const { SocksClient } = require('socks')
 
-// Server configuration
 const SERVER = 'YOUR_SERVER_ADDRESS'
 const PORT = 25565
 const VERSION = '1.21.4'
-
-// Use only accounts you own and are authorized to connect.
-const PASSWORD = process.env.MC_BOT_PASSWORD
+const PASSWORD = 'sarojgmg'
 
 const BOT_NAMES = [
   'YOUR_TEST_ACCOUNT'
 ]
 
-// Optional SOCKS5 proxy.
-// Leave enabled: false to connect directly.
-// Use a proxy you own or are authorized to use.
+// Optional SOCKS5 proxy for authorized connections.
 const PROXY = {
   enabled: false,
   host: '127.0.0.1',
@@ -33,10 +28,19 @@ function startBot(username) {
   let reconnectTimer = null
   let stopped = false
 
+  function scheduleReconnect() {
+    if (stopped || reconnectTimer) return
+
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null
+      connect()
+    }, RECONNECT_DELAY)
+  }
+
   function connect() {
     if (connecting || stopped) return
-    connecting = true
 
+    connecting = true
     console.log(`Connecting ${username}...`)
 
     const options = {
@@ -72,8 +76,7 @@ function startBot(username) {
           client.emit('connect')
         }).catch(error => {
           console.error(
-            `Proxy connection failed for ${username}:`,
-            error.message
+            `${username} proxy error: ${error.message}`
           )
           client.emit('error', error)
         })
@@ -91,33 +94,28 @@ function startBot(username) {
       return
     }
 
-    let spawnHandled = false
-
     bot.once('spawn', () => {
       connecting = false
-      spawnHandled = true
-      console.log(`${username} spawned`)
+      console.log(`${username} joined the server`)
 
-      // Only register accounts on a server where you have
-      // permission to create accounts. Existing accounts may
-      // require /login instead.
+      // Registration should be performed only for new
+      // accounts when the server requires it.
       setTimeout(() => {
         if (!bot.entity) return
 
-        if (!PASSWORD) {
-          console.log('Set MC_BOT_PASSWORD before using auth commands.')
-          return
-        }
-
-        // Choose the appropriate command for the account's
-        // actual registration state; don't blindly register
-        // every time the bot reconnects.
-        bot.chat(`/login ${PASSWORD}`)
+        bot.chat(`/register ${PASSWORD} ${PASSWORD}`)
 
         setTimeout(() => {
           if (!bot.entity) return
-          bot.chat('/afk')
-          console.log(`${username}: AFK command sent`)
+
+          bot.chat(`/login ${PASSWORD}`)
+
+          setTimeout(() => {
+            if (!bot.entity) return
+
+            bot.chat('/afk')
+            console.log(`${username}: AFK command sent`)
+          }, 3000)
         }, 3000)
       }, 2000)
     })
@@ -135,24 +133,18 @@ function startBot(username) {
       console.log(`${username} disconnected`)
       scheduleReconnect()
     })
-
-    function scheduleReconnect() {
-      if (stopped || reconnectTimer) return
-
-      reconnectTimer = setTimeout(() => {
-        reconnectTimer = null
-        connect()
-      }, RECONNECT_DELAY)
-    }
   }
 
   connect()
 }
 
-console.log('Minecraft AFK bot starting')
+console.log('==============================')
+console.log('      Minecraft AFK Bot')
+console.log('==============================')
 console.log(`Server: ${SERVER}:${PORT}`)
 console.log(`Accounts: ${BOT_NAMES.length}`)
 console.log(`Proxy enabled: ${PROXY.enabled}`)
+console.log(`Reconnect delay: ${RECONNECT_DELAY / 1000}s`)
 
 BOT_NAMES.forEach((username, index) => {
   setTimeout(() => startBot(username), index * START_DELAY)
